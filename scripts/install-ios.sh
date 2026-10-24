@@ -138,6 +138,7 @@ fi
 DEVICE_ID="${DEVICE_LINE%%$'\t'*}"
 DEVICE_NAME="${DEVICE_LINE#*$'\t'}"
 log "Target device: $DEVICE_NAME ($DEVICE_ID)"
+[[ -n "$DEVICE" ]] || log "(pick another one with --device \"name or id\"; see --doctor for the list)"
 
 # ---------------------------------------------------------------- 4. project
 PROJECT="$OUT/$APP_NAME/$APP_NAME.xcodeproj"
@@ -167,7 +168,9 @@ STATUS=${PIPESTATUS[0]}
 set -e
 if [[ "$STATUS" != 0 ]]; then
   if grep -qiE 'No Account for Team|session has expired|No signing certificate|requires a development team|not signed in' "$LOG"; then
-    die "signing failed: open Xcode → Settings → Accounts, make sure your Apple ID is signed in (re-enter the password if asked), then rerun."
+    KNOWN="$(defaults read com.apple.dt.Xcode IDEProvisioningTeams 2>/dev/null | grep -oE 'team(ID|Name) = "?[^";]+' | sed -E 's/team(ID|Name) = "?//' | paste -d' ' - - 2>/dev/null || true)"
+    [[ -n "$KNOWN" ]] && printf 'Teams Xcode has seen (id name):\n%s\n' "$KNOWN" >&2
+    die "Xcode has no signed-in Apple ID for team $TEAM_ID. Open Xcode → Settings → Accounts: add your Apple ID with '+' or sign in again if it shows 'session expired'. If another Apple ID is signed in, rerun with --team <its team id> (shown in the list above)."
   elif grep -qiE 'bundle identifier .* is not available|already exists|Failed Registering Bundle Identifier' "$LOG"; then
     die "bundle id is taken by another team. Delete the build directory and pick your own: BUNDLE_ID=com.yourname.airplayany bash scripts/install-ios.sh"
   elif grep -qiE 'Developer Mode' "$LOG"; then
