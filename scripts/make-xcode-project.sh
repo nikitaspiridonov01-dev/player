@@ -12,6 +12,7 @@
 #   OUT        output directory for the Xcode project    (default: build)
 #   COPY=1     copy extension files into the project instead of referencing ./extension
 #   OPEN=1     open the generated project in Xcode when done
+#   QUIET=1    skip the closing hints (used by the install scripts)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -49,9 +50,11 @@ esac
 echo "→ xcrun $TOOL ${ARGS[*]} extension"
 xcrun "$TOOL" "${ARGS[@]}" extension
 
+[[ "${QUIET:-0}" == "1" ]] && exit 0
 echo
 echo "Done. Open the project:"
 echo "  open \"$OUT/$APP_NAME/$APP_NAME.xcodeproj\""
 echo
 echo "Next: in Xcode select your Team (Signing & Capabilities) for the app and the extension targets,"
 echo "pick your iPhone (or 'My Mac') as the run destination and press Run."
+echo "Or do it from the terminal: bash scripts/install-ios.sh / bash scripts/install-macos.sh"

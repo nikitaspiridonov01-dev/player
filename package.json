@@ -10,7 +10,10 @@
     "test": "npm run check && npm run test:unit && npm run test:e2e",
     "serve": "node test/server.mjs",
     "icons": "python3 scripts/make-icons.py",
-    "xcode": "bash scripts/make-xcode-project.sh"
+    "xcode": "bash scripts/make-xcode-project.sh",
+    "doctor": "bash scripts/install-ios.sh --doctor",
+    "install:ios": "bash scripts/install-ios.sh",
+    "install:macos": "bash scripts/install-macos.sh"
   },
   "devDependencies": {
     "playwright": "^1.63.0"

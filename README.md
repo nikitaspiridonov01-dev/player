@@ -76,6 +76,51 @@ open "build/AirPlay Any Video/AirPlay Any Video.xcodeproj"
 Схема **AirPlay Any Video (macOS)** → Run → Safari → Настройки → Расширения → включить. Для неподписанных сборок
 может понадобиться Safari → Разработка → «Разрешить неподписанные расширения» (пункт появляется после включения меню «Разработка»).
 
+### Полностью из терминала
+
+Один раз подготовить Mac и телефон:
+
+```bash
+# 1. Xcode (полный, не только Command Line Tools): App Store → Xcode, или через mas:
+brew install mas && mas install 497799835
+sudo xcode-select -s /Applications/Xcode.app
+sudo xcodebuild -license accept
+xcodebuild -runFirstLaunch
+```
+
+2. **Apple ID в Xcode** — Xcode → Settings → Accounts → «+» → войти. Это единственный шаг, у которого нет команды:
+   Apple не даёт добавить аккаунт из терминала, а без него `xcodebuild` не может создать сертификат и профиль.
+   Достаточно бесплатного Apple ID; делается один раз, сессию Xcode хранит.
+3. **iPhone**: подключить кабелем, на телефоне нажать «Доверять», включить *Режим разработчика*
+   (Настройки → Конфиденциальность и безопасность → Режим разработчика; переключатель появляется после первого
+   подключения к Mac с Xcode). После первой проводной настройки `devicectl` видит телефон и по Wi‑Fi.
+
+Дальше всё командами:
+
+```bash
+bash scripts/install-ios.sh --doctor   # проверка: Xcode, команда подписи, список iPhone/iPad
+bash scripts/install-ios.sh            # проект → сборка → подпись → установка на телефон → запуск
+```
+
+Скрипт сам: генерирует Xcode-проект (если его нет), находит команду подписи в настройках Xcode, собирает
+`xcodebuild … -allowProvisioningUpdates` (сертификат и профиль создаются автоматически), ставит приложение через
+`xcrun devicectl device install app` и запускает его. Полезные варианты:
+
+```bash
+bash scripts/install-ios.sh --device "iPhone Никиты"          # выбрать устройство по имени или id
+TEAM_ID=ABCDE12345 bash scripts/install-ios.sh                # указать команду подписи вручную
+BUNDLE_ID=com.myname.airplayany bash scripts/install-ios.sh   # свой bundle id (если «занят другой командой»)
+bash scripts/install-ios.sh --no-launch                       # только установить
+```
+
+На телефоне после установки: при запросе «Ненадёжный разработчик» — Настройки → Основные → VPN и управление
+устройством → ваш Apple ID → Доверять; затем Настройки → Safari → Расширения → включить. С бесплатным Apple ID
+приложение живёт 7 дней — просто повторите `bash scripts/install-ios.sh`.
+
+Для Mac то же самое одной командой: `bash scripts/install-macos.sh` — собирает, кладёт приложение в
+`~/Applications` и открывает его; остаётся включить расширение в Safari → Настройки → Расширения. Без команды
+подписи сборка будет ad-hoc, и Safari потребует Разработка → «Разрешить неподписанные расширения».
+
 ## Использование
 
 * **Значок на видео** — главный способ (особенно на iPhone). Нажмите → панель:
@@ -126,6 +171,8 @@ extension/                 ← само WebExtension (его упаковыва�
   _locales/{ru,en}/        локализация (Safari выбирает по языку системы)
   icons/                   иконки (генерируются scripts/make-icons.py)
 scripts/make-xcode-project.sh   генерация Xcode-проекта (packager/converter)
+scripts/install-ios.sh          сборка, подпись и установка на iPhone/iPad из терминала (xcodebuild + devicectl)
+scripts/install-macos.sh        сборка и установка приложения с расширением на Mac из терминала
 scripts/make-icons.py           генерация PNG-иконок (Pillow)
 scripts/check.mjs               синтаксис JS, валидность JSON, ссылки в манифесте
 test/                      тестовая страница + Playwright e2e (Chromium) + юнит-тесты
