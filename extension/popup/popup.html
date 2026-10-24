@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>AirPlay Any Video</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="head">
+    <img src="../icons/icon-48.png" alt="" width="28" height="28">
+    <div class="head-text">
+      <b data-i18n="extName">AirPlay Any Video</b>
+      <div id="hook" class="muted small"></div>
+    </div>
+    <button id="rescan" class="icon-btn" type="button" title="Rescan" aria-label="Rescan">
+      <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+    </button>
+  </header>
+
+  <div id="ios-hint" class="hint" hidden data-i18n="popupIosHint"></div>
+
+  <section>
+    <h2 data-i18n="popupVideos">Videos</h2>
+    <div id="videos"></div>
+  </section>
+
+  <section>
+    <h2 data-i18n="popupStreams">Streams</h2>
+    <div id="streams"></div>
+  </section>
+
+  <section class="settings">
+    <label><input type="checkbox" id="s-showBadges"> <span data-i18n="popupShowBadges"></span></label>
+    <label><input type="checkbox" id="s-autoUnblock"> <span data-i18n="popupAutoUnblock"></span></label>
+    <label><input type="checkbox" id="s-pauseOriginal"> <span data-i18n="popupPauseOriginal"></span></label>
+    <label><input type="checkbox" id="s-deepCapture"> <span id="deep-label">Deep stream capture (fetch/XHR hook)</span></label>
+  </section>
+
+  <footer class="muted small">
+    <span id="version"></span> · <a href="https://github.com/nikitaspiridonov01-dev/player#readme" target="_blank" rel="noopener">README</a>
+  </footer>
+
+  <script src="../common/streams.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
