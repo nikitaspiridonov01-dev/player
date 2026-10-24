@@ -108,10 +108,16 @@ bash scripts/install-ios.sh            # проект → сборка → по�
 
 ```bash
 bash scripts/install-ios.sh --device "iPhone Никиты"          # выбрать устройство по имени или id
-TEAM_ID=ABCDE12345 bash scripts/install-ios.sh                # указать команду подписи вручную
+bash scripts/install-ios.sh --list-teams                      # все Team ID, которые есть на этом Mac
+bash scripts/install-ios.sh --team ABCDE12345                 # указать команду подписи вручную
 BUNDLE_ID=com.myname.airplayany bash scripts/install-ios.sh   # свой bundle id (если «занят другой командой»)
 bash scripts/install-ios.sh --no-launch                       # только установить
 ```
+
+Если сборка падает с `No Account for Team …`, скрипт угадал не ту команду (например, по старому сертификату).
+Посмотрите `--list-teams` и передайте нужный ID через `--team`; точный Team ID всегда виден на
+developer.apple.com/account → Membership details. Либо откройте сгенерированный проект в Xcode один раз, выберите
+Team в Signing & Capabilities у обоих таргетов и снова запустите скрипт: дальше он берёт команду из проекта.
 
 На телефоне после установки: при запросе «Ненадёжный разработчик» — Настройки → Основные → VPN и управление
 устройством → ваш Apple ID → Доверять; затем Настройки → Safari → Расширения → включить. С бесплатным Apple ID

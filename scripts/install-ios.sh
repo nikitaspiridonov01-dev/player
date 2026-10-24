@@ -16,6 +16,7 @@
 #   bash scripts/install-ios.sh                        # auto-detect team and device, build, install, launch
 #   bash scripts/install-ios.sh --device "iPhone 15"   # pick a device by name or identifier
 #   bash scripts/install-ios.sh --doctor               # only check prerequisites and list devices
+#   bash scripts/install-ios.sh --list-teams           # every Apple Developer team id found on this Mac
 #   TEAM_ID=ABCDE12345 BUNDLE_ID=com.me.airplayany bash scripts/install-ios.sh
 #
 # Options / environment:
@@ -24,6 +25,7 @@
 #   --bundle-id ID   | BUNDLE_ID      bundle identifier used when generating the project
 #   --no-launch                       install but do not launch the app
 #   --doctor                          check toolchain, team and devices, then exit
+#   --list-teams                      print team ids found in Xcode prefs, keychain certificates and profiles
 #   APP_NAME, OUT (build), CONFIGURATION (Release)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -36,6 +38,7 @@ TEAM_ID="${TEAM_ID:-}"
 DEVICE="${DEVICE:-}"
 DOCTOR=0
 LAUNCH=1
+LIST_TEAMS=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -43,6 +46,7 @@ while [[ $# -gt 0 ]]; do
     --device) DEVICE="${2:-}"; shift 2 ;;
     --bundle-id) BUNDLE_ID="${2:-}"; shift 2 ;;
     --doctor) DOCTOR=1; shift ;;
+    --list-teams) LIST_TEAMS=1; shift ;;
     --no-launch) LAUNCH=0; shift ;;
     -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
@@ -64,22 +68,54 @@ xcrun --find devicectl >/dev/null 2>&1 || die "devicectl not found: Xcode 15 or 
 # ---------------------------------------------------------------- 2. signing team
 PROJECT="$OUT/$APP_NAME/$APP_NAME.xcodeproj"
 TEAM_SOURCE="--team"
+# Every team id this Mac knows about, one per line: "<id>\t<where it was found>".
+list_teams() {
+  {
+    if [[ -f "$PROJECT/project.pbxproj" ]]; then
+      grep -o 'DEVELOPMENT_TEAM = [A-Z0-9]\{10\}' "$PROJECT/project.pbxproj" 2>/dev/null | grep -o '[A-Z0-9]\{10\}$' | sed 's/$/\tgenerated Xcode project (chosen in Signing \& Capabilities)/'
+    fi
+    for key in IDEProvisioningTeamIdentifiers IDEProvisioningTeams; do
+      defaults read com.apple.dt.Xcode "$key" 2>/dev/null | grep -oE '(^|[^A-Za-z0-9])[A-Z0-9]{10}([^A-Za-z0-9]|$)' | grep -oE '[A-Z0-9]{10}' | sed "s/\$/\tXcode preferences ($key)/"
+    done
+    security find-identity -v -p codesigning 2>/dev/null | grep -oE '"(Apple Development|iPhone Developer|Apple Distribution|iPhone Distribution): [^"]*\([A-Z0-9]{10}\)"' | sed -E 's/^"(.*[^ ]) *\(([A-Z0-9]{10})\)"$/\2\tkeychain certificate \1/'
+    for f in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"/*.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles"/*.mobileprovision; do
+      [[ -f "$f" ]] || continue
+      local plist; plist="$(security cms -D -i "$f" 2>/dev/null || true)"
+      local tid; tid="$(printf '%s' "$plist" | grep -A2 '<key>TeamIdentifier</key>' | grep -oE '[A-Z0-9]{10}' | head -1 || true)"
+      local pname; pname="$(printf '%s' "$plist" | grep -A1 '<key>Name</key>' | grep -oE '<string>[^<]*' | head -1 | sed 's/<string>//' || true)"
+      [[ -n "$tid" ]] && printf '%s\tprovisioning profile "%s"\n' "$tid" "$pname"
+    done
+  } | awk -F'\t' '!seen[$1]++ { printf "  %s   %s\n", $1, $2 }'
+}
+# Prints "<team id> <source>" (it runs in a subshell, so the source is printed, not assigned).
 detect_team() {
   local t
   # 1. A team chosen once in Xcode (Signing & Capabilities) is stored in the project file.
   if [[ -f "$PROJECT/project.pbxproj" ]]; then
     t="$(grep -o 'DEVELOPMENT_TEAM = [A-Z0-9]\{10\}' "$PROJECT/project.pbxproj" 2>/dev/null | head -1 | grep -o '[A-Z0-9]\{10\}$' || true)"
-    [[ -n "$t" ]] && { TEAM_SOURCE="project"; printf '%s' "$t"; return; }
+    [[ -n "$t" ]] && { printf '%s project' "$t"; return; }
   fi
-  # 2. Teams of the Apple IDs signed in to Xcode (older Xcode versions keep them in preferences).
-  t="$(defaults read com.apple.dt.Xcode IDEProvisioningTeams 2>/dev/null | grep -o 'teamID = "\{0,1\}[A-Z0-9]\{10\}' | head -1 | grep -o '[A-Z0-9]\{10\}$' || true)"
-  [[ -n "$t" ]] && { TEAM_SOURCE="xcode-accounts"; printf '%s' "$t"; return; }
+  # 2. Teams of the Apple IDs signed in to Xcode (kept in Xcode's preferences; key name varies by version).
+  for key in IDEProvisioningTeamIdentifiers IDEProvisioningTeams; do
+    t="$(defaults read com.apple.dt.Xcode "$key" 2>/dev/null | grep -oE '(^|[^A-Za-z0-9])[A-Z0-9]{10}([^A-Za-z0-9]|$)' | grep -oE '[A-Z0-9]{10}' | head -1 || true)"
+    [[ -n "$t" ]] && { printf '%s xcode-preferences' "$t"; return; }
+  done
   # 3. An existing development certificate in the keychain (the Apple ID may no longer be signed in!).
   t="$(security find-identity -v -p codesigning 2>/dev/null | grep -o 'Apple Development: [^"]*([A-Z0-9]\{10\})' | head -1 | grep -o '([A-Z0-9]\{10\})' | tr -d '()' || true)"
-  [[ -n "$t" ]] && { TEAM_SOURCE="keychain-certificate"; printf '%s' "$t"; return; }
+  [[ -n "$t" ]] && { printf '%s keychain-certificate' "$t"; return; }
   printf ''
 }
-[[ -n "$TEAM_ID" ]] || TEAM_ID="$(detect_team)"
+if [[ "$LIST_TEAMS" == 1 ]]; then
+  log "Team ids found on this Mac (pass one with --team ID):"
+  TEAMS="$(list_teams)"
+  if [[ -n "$TEAMS" ]]; then printf '%s\n' "$TEAMS"; else echo "  (none: sign in to Xcode → Settings → Accounts, or look up developer.apple.com/account → Membership details → Team ID)"; fi
+  exit 0
+fi
+if [[ -z "$TEAM_ID" ]]; then
+  DETECTED="$(detect_team)"
+  TEAM_ID="${DETECTED%% *}"
+  [[ -n "$TEAM_ID" ]] && TEAM_SOURCE="${DETECTED#* }"
+fi
 if [[ -z "$TEAM_ID" ]]; then
   if [[ "$DOCTOR" == 1 ]]; then
     warn "no signing team detected. Add your Apple ID once in Xcode → Settings → Accounts, or pass --team TEAMID."
@@ -140,6 +176,8 @@ if [[ "$DOCTOR" == 1 ]]; then
   log "Devices:"
   printf '%s\n' "$DEVICE_LINE"
   if [[ -d "$PROJECT" ]]; then log "Xcode project: $PROJECT"; else log "Xcode project not generated yet (created on first install)"; fi
+  log "Team ids found on this Mac (--team ID to choose):"
+  TEAMS="$(list_teams)"; [[ -n "$TEAMS" ]] && printf '%s\n' "$TEAMS" || echo "  (none)"
   exit 0
 fi
 DEVICE_ID="${DEVICE_LINE%%$'\t'*}"
@@ -174,9 +212,9 @@ STATUS=${PIPESTATUS[0]}
 set -e
 if [[ "$STATUS" != 0 ]]; then
   if grep -qiE 'No Account for Team|session has expired|No signing certificate|requires a development team|not signed in' "$LOG"; then
-    KNOWN="$(defaults read com.apple.dt.Xcode IDEProvisioningTeams 2>/dev/null | grep -oE 'team(ID|Name) = "?[^";]+' | sed -E 's/team(ID|Name) = "?//' | paste -d' ' - - 2>/dev/null || true)"
-    [[ -n "$KNOWN" ]] && printf 'Teams Xcode has seen (id name):\n%s\n' "$KNOWN" >&2
-    die "Xcode has no signed-in Apple ID for team $TEAM_ID (team source: $TEAM_SOURCE). Open Xcode → Settings → Accounts: add your Apple ID with '+' or sign in again if it shows 'session expired'. If that Apple ID has a different team, either rerun with --team <id>, or open the project once (open \"$PROJECT\"), pick the Team under Signing & Capabilities for both targets and rerun: the script then reads the team from the project."
+    KNOWN="$(list_teams)"
+    [[ -n "$KNOWN" ]] && printf 'Team ids found on this Mac:\n%s\n' "$KNOWN" >&2
+    die "the Apple ID signed in to Xcode has no team $TEAM_ID (team source: $TEAM_SOURCE). Either rerun with the right id: --team <id> (candidates above; the exact id is also at developer.apple.com/account → Membership details), or open the project once (open \"$PROJECT\"), pick the Team under Signing & Capabilities for both targets and rerun: the script then reads the team from the project. If Xcode → Settings → Accounts shows no account or 'session expired', sign in there first."
   elif grep -qiE 'bundle identifier .* is not available|already exists|Failed Registering Bundle Identifier' "$LOG"; then
     die "bundle id is taken by another team. Delete the build directory and pick your own: BUNDLE_ID=com.yourname.airplayany bash scripts/install-ios.sh"
   elif grep -qiE 'Developer Mode' "$LOG"; then
