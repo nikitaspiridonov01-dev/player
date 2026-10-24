@@ -202,14 +202,23 @@ print(ios[0] if ios else "")')"
 DERIVED="$OUT/DerivedData"
 LOG="$OUT/xcodebuild-ios.log"
 log "Building scheme '$SCHEME' ($CONFIGURATION) for iOS devices; the first build also creates the certificate and profile. Log: $LOG"
-set +e
-xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIGURATION" \
-  -destination 'generic/platform=iOS' -derivedDataPath "$DERIVED" \
-  -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
-  DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic build 2>&1 \
-  | tee "$LOG" | grep --line-buffered -E '(^\*\* |error:|Signing Identity:|Provisioning Profile:)'
-STATUS=${PIPESTATUS[0]}
-set -e
+run_build() {
+  set +e
+  xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIGURATION" \
+    -destination 'generic/platform=iOS' -derivedDataPath "$DERIVED" \
+    -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
+    DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic build 2>&1 \
+    | tee "$LOG" | grep --line-buffered -E '(^\*\* |error:|Signing Identity:|Provisioning Profile:)'
+  STATUS=${PIPESTATUS[0]}
+  set -e
+}
+run_build
+# Xcode sometimes creates the provisioning profile during the build and then fails to find it in the same
+# run ("Build input file cannot be found: …mobileprovision"); the second run succeeds.
+if [[ "$STATUS" != 0 ]] && grep -qiE 'cannot be found: .*\.mobileprovision' "$LOG"; then
+  log "The provisioning profile was created during this build; building again"
+  run_build
+fi
 if [[ "$STATUS" != 0 ]]; then
   if grep -qiE 'No Account for Team|session has expired|No signing certificate|requires a development team|not signed in' "$LOG"; then
     KNOWN="$(list_teams)"
