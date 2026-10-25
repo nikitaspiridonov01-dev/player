@@ -16,6 +16,7 @@ OUT="${OUT:-build}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 TEAM_ID="${TEAM_ID:-}"
 DEST_DIR="${DEST_DIR:-$HOME/Applications}"
+MACOS_MIN="${MACOS_MIN:-12.0}"   # the packager's 10.14 is below what current Xcode can build
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -80,7 +81,7 @@ log "Building scheme '$SCHEME' ($CONFIGURATION). Log: $LOG"
 run_build() {
   set +e
   xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIGURATION" -destination 'platform=macOS' \
-    -derivedDataPath "$DERIVED" "${SIGN_ARGS[@]}" build 2>&1 | tee "$LOG" | grep --line-buffered -E '(^\*\* |error:)'
+    -derivedDataPath "$DERIVED" "${SIGN_ARGS[@]}" MACOSX_DEPLOYMENT_TARGET="$MACOS_MIN" build 2>&1 | tee "$LOG" | grep --line-buffered -E '(^\*\* |error:)'
   STATUS=${PIPESTATUS[0]}
   set -e
 }

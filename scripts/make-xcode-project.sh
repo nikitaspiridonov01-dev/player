@@ -50,6 +50,15 @@ esac
 echo "→ xcrun $TOOL ${ARGS[*]} extension"
 xcrun "$TOOL" "${ARGS[@]}" extension
 
+# The packager still writes MACOSX_DEPLOYMENT_TARGET = 10.14, which current Xcode refuses to build
+# (supported range starts at 12.0). Safari 16.4+ needs macOS 13 anyway; raise the minimum.
+PBX="$OUT/$APP_NAME/$APP_NAME.xcodeproj/project.pbxproj"
+MACOS_MIN="${MACOS_MIN:-12.0}"
+if [[ -f "$PBX" ]] && grep -q 'MACOSX_DEPLOYMENT_TARGET = 1[01]\.' "$PBX"; then
+  sed "s/MACOSX_DEPLOYMENT_TARGET = 1[01]\.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = $MACOS_MIN;/g" "$PBX" > "$PBX.tmp" && mv "$PBX.tmp" "$PBX"
+  echo "→ macOS deployment target raised to $MACOS_MIN in project.pbxproj"
+fi
+
 [[ "${QUIET:-0}" == "1" ]] && exit 0
 echo
 echo "Done. Open the project:"
